@@ -5,6 +5,8 @@ from typing import Any
 
 import torch
 from vllm.logger import logger
+from vllm.v1.core.kv_cache_utils import maybe_convert_block_hash
+from mooncake.store import StoreEventInfo
 
 from vllm_ascend.distributed.kvpool.backend.backend import Backend
 
@@ -118,11 +120,21 @@ class KVCacheStoreSendingThread(KVTransferThread):
         starts = []
         ends = []
         keys = []
+        store_event_infos = []
         for start, end, key in self.token_database.process_tokens(
                 token_len, req_meta.block_hashes):
             starts.append(start)
             ends.append(end)
             keys.append(key.to_string())
+        model_name = req_meta.model_name
+        for current_hash in req_meta.block_hashes:
+            store_event_infos.append(StoreEventInfo(
+                model_name=model_name,
+                block_size=0,
+                block_hash=str(maybe_convert_block_hash(current_hash))
+                parent_block_hash="",
+                token_ids=[],
+            ))
 
         if not self.dcp_size > 1:
             starts = starts[self.tp_rank % self.put_step::self.put_step]
@@ -170,7 +182,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
             """
             if current_event is not None:
                 current_event.synchronize()
-            self.m_store.put(keys, addrs, sizes)
+            self.m_store.put(keys, addrs, sizes, store_event_infos)
 
         if is_last_chunk:
             self.set_finished_request(req_id)

@@ -286,6 +286,8 @@ class ReqMeta:
     is_last_chunk: Optional[bool] = None
 
     current_event: Optional[torch.npu.Event] = None
+    
+    model_name: str = None
 
     @staticmethod
     def from_request_tracker(

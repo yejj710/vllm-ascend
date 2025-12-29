@@ -38,6 +38,7 @@ class KVPoolWorker:
         use_layerwize: bool,
     ):
         model_config = vllm_config.model_config
+        self.model_name = model_config.served_model_name
         parallel_config = vllm_config.parallel_config
         self.dp_rank = parallel_config.data_parallel_rank
         self.use_mla = False
@@ -289,6 +290,7 @@ class KVPoolWorker:
                 continue
 
             request.current_event = current_event
+            request.model_name = self.model_name
             self.kv_send_thread.add_request(  # type: ignore[union-attr]
                 request, )
 
