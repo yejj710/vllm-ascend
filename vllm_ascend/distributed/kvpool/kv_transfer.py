@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import torch
 from vllm.logger import logger
-from vllm.v1.core.kv_cache_utils import BlockHash
+from vllm.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
 
 from vllm_ascend.distributed.kvpool.backend.backend import Backend
 
@@ -14,7 +14,7 @@ from vllm_ascend.distributed.kvpool.config_data import (ChunkedTokenDatabase,
                                                         LasyerMultiBlockReqMeta
                                                         )
 # isort: on
-
+from mooncake.store import StoreEventInfo
 
 class KVTransferThread(threading.Thread):
 
@@ -41,6 +41,7 @@ class KVTransferThread(threading.Thread):
         block_hashes: list[BlockHash],
         mask_num: int = 0,
         is_last_chunk: Optional[bool] = None,
+        model_name: str = None,
     ) -> torch.Tensor:
         req = ({
             "req_id": req_id,
@@ -49,6 +50,7 @@ class KVTransferThread(threading.Thread):
             "block_hashes": block_hashes,
             "mask_num": mask_num,
             "is_last_chunk": is_last_chunk,
+            "model_name": model_name,
         })
         self.request_queue.put(req)
 
@@ -106,6 +108,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
         block_hashes = req_meta["block_hashes"]
         req_id = req_meta["req_id"]
         is_last_chunk = req_meta["is_last_chunk"]
+        model_name = req_meta["model_name"]
         addr_list = []
         size_list = []
         key_list = []
@@ -116,8 +119,17 @@ class KVCacheStoreSendingThread(KVTransferThread):
             key_list.append(key.to_string())
             addr_list.append(addr)
             size_list.append(size)
+        store_events = []
+        for bh in block_hashes:
+            store_events.append(StoreEventInfo(
+                model_name=model_name,
+                block_size=0,
+                block_hash=str(maybe_convert_block_hash(bh)),
+                parent_block_hash="",
+                token_ids=[]
+            ))
         if self.dcp_size > 1:
-            self.m_store.put(key_list, addr_list, size_list)
+            self.m_store.put(key_list, addr_list, size_list, store_events)
         else:
             key_list_tp = key_list[self.tp_rank % self.put_step::self.put_step]
             addr_list_tp = addr_list[self.tp_rank %
@@ -125,7 +137,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
             size_list_tp = size_list[self.tp_rank %
                                      self.put_step::self.put_step]
             if key_list_tp:
-                self.m_store.put(key_list_tp, addr_list_tp, size_list_tp)
+                self.m_store.put(key_list_tp, addr_list_tp, size_list_tp, store_events)
         if is_last_chunk:
             self.set_finished_request(req_id)
         self.request_queue.task_done()

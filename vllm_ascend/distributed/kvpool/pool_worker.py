@@ -38,6 +38,7 @@ class KVPoolWorker:
         use_layerwize: bool,
     ):
         model_config = vllm_config.model_config
+        self.model_name = model_config.served_model_name
         parallel_config = vllm_config.parallel_config
         self.dp_rank = parallel_config.data_parallel_rank
         self.use_mla = False
@@ -344,6 +345,7 @@ class KVPoolWorker:
                 request.block_hashes,
                 mask_num,
                 request.is_last_chunk,
+                self.model_name,
             )
 
     def retrieve_layer(

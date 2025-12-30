@@ -54,9 +54,9 @@ class MooncakeBackend(Backend):
         return self.store.batch_is_exist(keys)
 
     def put(self, keys: list[str], addrs: list[list[int]],
-            sizes: list[list[int]]):
+            sizes: list[list[int]], store_event):
         try:
-            res = self.store.batch_put_from_multi_buffers(keys, addrs, sizes)
+            res = self.store.batch_put_from_multi_buffers(keys, addrs, sizes, store_event_infos=store_event)
             for value in res:
                 if value < 0:
                     logger.error(f"Failed to put key {keys},res:{res}")
