@@ -487,6 +487,7 @@ class NPUWorker(WorkerBase):
             self.parallel_config.prefill_context_parallel_size,
             self.parallel_config.decode_context_parallel_size)
         init_ascend_model_parallel(self.parallel_config)
+        # 这里初始化 kv connector worker
         ensure_kv_transfer_initialized(self.vllm_config)
         ensure_ec_transfer_initialized(self.vllm_config)
 
