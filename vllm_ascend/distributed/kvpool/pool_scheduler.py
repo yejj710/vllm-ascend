@@ -36,6 +36,7 @@ class KVPoolScheduler:
         self.dcp_size = getattr(vllm_config.parallel_config,
                                 "decode_context_parallel_size", 1)
 
+        self.original_block_size = vllm_config.cache_config.block_size
         self._block_size = vllm_config.cache_config.block_size
         if self.pcp_size > 1:
             self._block_size *= self.pcp_size
@@ -189,6 +190,7 @@ class KVPoolScheduler:
                 token_len=num_tokens_to_compute,
                 allocated_block_ids=unfolded_block_ids,
                 num_saved_tokens=0,
+                token_ids=request.prompt_token_ids[:num_tokens_to_compute].copy(),
             )
             self._request_trackers[request.req_id] = request_tracker
             last_chunk_tokens_num = ((len(request.prompt_token_ids) //
@@ -205,6 +207,7 @@ class KVPoolScheduler:
                 is_last_chunk=request_tracker.token_len
                 >= last_chunk_tokens_num,
                 discard_partial_chunks=self._discard_partial_chunks,
+                original_block_size=self.original_block_size,
             )
             if req_meta is not None:
                 meta.add_request(req_meta)
@@ -233,6 +236,7 @@ class KVPoolScheduler:
                         token_len=num_tokens_to_compute,
                         allocated_block_ids=new_block_ids,
                         num_saved_tokens=0,
+                        token_ids=request_real.prompt_token_ids[:num_tokens_to_compute].copy(),
                     )
                     self._request_trackers[req_id] = request_tracker
                     last_chunk_tokens_num = (
@@ -249,6 +253,7 @@ class KVPoolScheduler:
                         is_last_chunk=request_tracker.token_len
                         >= last_chunk_tokens_num,
                         discard_partial_chunks=self._discard_partial_chunks,
+                        original_block_size=self.original_block_size,
                     )
 
                 # decode/chunked request
@@ -287,6 +292,7 @@ class KVPoolScheduler:
                         is_last_chunk=request_tracker.token_len
                         >= last_chunk_tokens_num,
                         discard_partial_chunks=self._discard_partial_chunks,
+                        original_block_size=self.original_block_size,
                     )
                 if req_meta is not None:
                     meta.add_request(req_meta)
@@ -313,7 +319,6 @@ class KVPoolScheduler:
                 )
 
                 self._request_trackers[request_id] = request_tracker
-
                 req_meta = ReqMeta.from_request_tracker(
                     request_tracker,
                     self._block_size,

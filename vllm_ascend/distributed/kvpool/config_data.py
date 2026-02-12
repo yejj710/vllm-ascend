@@ -231,7 +231,6 @@ class RequestTracker:
     # Request id
     req_id: str
 
-    # The token ids that has been scheduled so far
     token_len: int
 
     # The block ids that has been allocated so far
@@ -242,6 +241,10 @@ class RequestTracker:
 
     # The number of tokens that has been savd
     num_saved_tokens: int = 0
+
+    # The token ids that has been scheduled so far
+    # NOTE: This field will only be used when you enable kv-event
+    token_ids: list[int] | None = None
 
     @staticmethod
     def from_new_request(
@@ -266,6 +269,7 @@ class RequestTracker:
 
         return RequestTracker(
             req_id=new_request.req_id,
+            token_ids=new_request.prompt_token_ids[:num_tokens_to_compute].copy(),
             token_len=num_tokens_to_compute,
             allocated_block_ids=unfolded_block_ids,
             num_saved_tokens=0,
@@ -278,7 +282,6 @@ class RequestTracker:
         """Update the request tracker when a running request is
         scheduled again
         """
-
         if len(new_block_ids) == 0:
             new_block_ids = []
         elif isinstance(new_block_ids, tuple):
@@ -295,7 +298,7 @@ class RequestTracker:
 class ReqMeta:
     # Request id
     req_id: str
-    # Request tokens
+    # Number of tokens in this chunk
     token_len_chunk: int
 
     block_ids: list[int]
@@ -310,6 +313,11 @@ class ReqMeta:
 
     current_event: Optional[torch.npu.Event] = None
 
+    # The following parameters are only used for kv event generation
+    # TODO: add lora_request which used for gen lora_id/lora_name in kv event
+    token_ids: list[int] | None = None
+    original_block_size: int | None = None
+
     @staticmethod
     def from_request_tracker(
         tracker: RequestTracker,
@@ -319,15 +327,18 @@ class ReqMeta:
         block_hashes: list[BlockHash] = [],
         is_last_chunk: Optional[bool] = None,
         discard_partial_chunks: bool = True,
+        original_block_size: int | None = None,
     ) -> Optional["ReqMeta"]:
         """Create the request metadata from a request tracker.
 
         Args:
             tracker (RequestTracker): the request tracker.
-            block_size (int): the block size in vLLM.
+            block_size (int): the block size in vLLM scheduler and AscendConnector.
+                If context parallelism is enabled, block_size = block_size * pcp_size * dcp_size.
             load_spec (Optional[LoadSpec]): the load spec for KV cache loading.
             skip_save (bool): whether to skip the save operation.
             discard_partial_chunks (bool): whether to discard partial chunks.
+            original_block_size (int | None): the block size in vLLM worker. This is only used for kv event generation.
 
         Returns:
             the request metadata if we need to perform load/save
@@ -353,6 +364,11 @@ class ReqMeta:
         if not skip_save:
             tracker.num_saved_tokens = num_tokens_to_save
 
+        # Get the token ids for kv event generation in kv_transfer
+        token_ids = None
+        if tracker.token_ids:
+            token_ids = tracker.token_ids
+
         # # For load operation: check whether the request is scheduled to load
         if load_spec is not None and load_spec.can_load:
             logger.debug(
@@ -374,6 +390,8 @@ class ReqMeta:
             load_spec=load_spec,
             block_hashes=block_hashes,
             is_last_chunk=is_last_chunk,
+            token_ids=token_ids,
+            original_block_size=original_block_size,
         )
 
 
