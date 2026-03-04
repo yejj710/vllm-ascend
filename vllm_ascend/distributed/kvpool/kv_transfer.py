@@ -219,7 +219,6 @@ class KVCacheStoreSendingThread(KVTransferThread):
                         block_size=req_meta.original_block_size,
                         lora_id=None,
                         medium="cpu",
-                        lora_name=None,
                     )
                     stored_events.append(stored_event)
                     prev_key = new_block_hashes[index]
