@@ -171,6 +171,9 @@ if (BUILD_OPEN_PROJECT)
             LOG_CPP
             PROCESS_LOG
     )
+    target_link_directories(cust_opmaster PRIVATE
+            ${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/lib64
+    )
     target_link_libraries(cust_opmaster PRIVATE
             $<BUILD_INTERFACE:intf_pub>
             $<BUILD_INTERFACE:ops_transformer_utils_tiling_headers>
@@ -186,6 +189,8 @@ if (BUILD_OPEN_PROJECT)
             platform
             register
             error_manager
+            acl_rt
+            ascendcl
             ascendalog
             unified_dlog
             -Wl,--as-needed
